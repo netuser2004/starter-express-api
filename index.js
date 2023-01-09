@@ -23,7 +23,7 @@ app.use(cors({
 
 // app.use('static', express.static(path.join(__dirname, 'static')));
 
-app.get('/', (req, res) => {
+app.all('/', (req, res) => {
     const term = req.query.term;
     if (term && isReady) {
         const items = index.search(term);
