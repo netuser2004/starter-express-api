@@ -1,72 +1,64 @@
-const fs = require('fs');
-const es = require('event-stream');
-const { Index } = require('flexsearch');
-const cities = [];
 const express = require('express');
-const index = new Index("performance");
+const helmet = require('helmet');
+const cors = require('cors');
+const path = require('path');
+const { Index } = require('flexsearch');
+const AdmZip = require("adm-zip");
 
-const app = express()
-app.all('/', (req, res) => {
+const PORT = 3000;
+let cities = [];
+const index = new Index("performance");
+let isReady = false;
+
+const app = express();
+app.disable('x-powered-by');
+app.set('etag', false);
+app.use(helmet());
+app.use(cors({
+    origin: [
+      'http://localhost:5501',
+    ],
+    optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
+  }));
+
+// app.use('static', express.static(path.join(__dirname, 'static')));
+
+app.get('/', (req, res) => {
     const term = req.query.term;
-    if (term) {
+    if (term && isReady) {
         const items = index.search(term);
         const result = items.map((item) => cities[item]);
-        const exact = result.filter(item => item.name.toLowerCase() === term.toLowerCase());
-        const nonExact = result.filter(item => item.name.toLowerCase() !== term.toLowerCase());
+        const exact = result.filter((item) => item.name.toLowerCase() === term.toLowerCase());
+        const nonExact = result.filter((item) => item.name.toLowerCase() !== term.toLowerCase());
         // result.sort((a,b) => b.population - a.population)
-        const final = [...exact.sort((a,b) => b.population - a.population), ...nonExact.sort((a,b) => b.population - a.population)];
+        const final = [...exact.sort((a, b) => b.population - a.population), ...nonExact.sort((a, b) => b.population - a.population)];
         res.send(final);
     } else {
         res.send('Yo!');
     }
 })
 
-function processFile(inputFile, startFrom = 1, stopAt = null) {
-    return new Promise(async (resolve, reject) => {
-        const fieldSepartor = '\t';
-        let lineNumber = 0;
-        const s = fs.createReadStream(inputFile)
-        .pipe(es.split())
-        .pipe(es.mapSync(function (line) {
-            s.pause();
-            lineNumber++;
-            // if (lineNumber % 1000000 === 0) console.log(lineNumber);
-            if (lineNumber >= startFrom) {
-                const [
-                name,
-                district,
-                state,
-                country,
-                latitude,
-                longitude,
-                timezone,
-                population
-                ] = line.split(fieldSepartor);
-                index.add(lineNumber - 1, name);
-                cities.push({name, district, state, country, latitude: +latitude, longitude: +longitude, timezone, population: +population});
-            }
 
-            if (stopAt && lineNumber >= stopAt) {
-                s.end();
-            }
 
-            s.resume();
-            })
-            .on('error', function (err) {
-                console.log('Error while reading file.', err);
-                reject(err);
-            })
-            .on('end', function () {
-                console.log('Read entire file.');
-                resolve();
-            })
-        );
+module.exports = app;
+
+const startTime = new Date().getTime();
+const zip = new AdmZip(path.join(__dirname, 'citiesDb.zip'));
+const zipEntries = zip.getEntries();
+let count = 0;
+zipEntries.forEach(function (zipEntry) {
+    const list = JSON.parse(zipEntry.getData().toString("utf8"));
+    const start = cities.length + 1;
+    list.forEach((city, i) => {
+        index.add(i + start, city.name);
     });
-}
-
-processFile('cities2.txt', 1, null)
-  .then(() => {
-    app.listen(process.env.PORT || 3000);
-    console.log('listening on port 3000');
-  })
-  .catch(err => console.err(err));
+    cities = [...cities, ...list];
+    count++;
+    console.log(`${count} of ${zipEntries.length}`);
+});
+const timeTaken = (new Date().getTime() - startTime) / 1000;
+console.log(`Complete. Time Taken: ${timeTaken}seconds.`, cities.length);
+isReady = true;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
