@@ -38,7 +38,9 @@ app.all('/', (req, res) => {
     }
 })
 
-
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
 
 module.exports = app;
 
@@ -59,6 +61,4 @@ zipEntries.forEach(function (zipEntry) {
 const timeTaken = (new Date().getTime() - startTime) / 1000;
 console.log(`Complete. Time Taken: ${timeTaken}seconds.`, cities.length);
 isReady = true;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+
